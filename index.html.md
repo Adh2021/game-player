@@ -1,0 +1,157 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>Ren'Py PWA Hub</title>  
+      
+    <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Ren%27Py%20PWA%20Hub%22%2C%22short_name%22%3A%22RenPyPWA%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23121212%22%2C%22theme_color%22%3A%22%232563eb%22%2C%22orientation%22%3A%22any%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fvia.placeholder.com%2F192%2F2563eb%2Fffffff%3Ftext%3DRenPy%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%22%7D%5D%7D">  
+      
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>  
+      
+    <style>  
+        body { background-color: #121212; color: #e5e7eb; font-family: sans-serif; }  
+        .game-frame { border: none; width: 100%; height: 100%; background: #000; }  
+    </style>  
+</head>  
+<body class="h-screen flex flex-col overflow-hidden">  
+  
+    <header class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between z-10">  
+        <div class="flex items-center space-x-3">  
+            <span class="text-xl font-bold tracking-wider text-blue-500">Ren'Py PWA Engine</span>  
+        </div>  
+        <div class="flex items-center space-x-2">  
+            <button id="backToLibrary" class="hidden bg-gray-800 hover:bg-gray-700 text-sm px-4 py-2 rounded-lg transition" onclick="showLibrary()">  
+                ← Library  
+            </button>  
+            <button id="installBtn" class="hidden bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-lg transition">  
+                Install App  
+            </button>  
+        </div>  
+    </header>  
+  
+    <main class="flex-1 relative">  
+          
+        <div id="libraryView" class="absolute inset-0 overflow-y-auto p-6 max-w-4xl mx-auto">  
+            <div class="text-center my-8">  
+                <h1 class="text-3xl font-extrabold mb-2 text-white">Your Web Visual Novels</h1>  
+                <p class="text-gray-400">Launch a remote web-compiled Ren'Py game directory directly in your sandbox.</p>  
+            </div>  
+  
+            <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-xl mb-8">  
+                <h2 class="text-lg font-semibold mb-4 text-gray-200">Launch from URL</h2>  
+                <form id="launchForm" onsubmit="launchGameFromForm(event)" class="space-y-4">  
+                    <div>  
+                        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Ren'Py Web Directory URL</label>  
+                        <input type="url" id="gameUrl" required placeholder="https://example.com/my-renpy-game/"   
+                               class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500">  
+                        <p class="text-xs text-gray-500 mt-2">Note: Server must have CORS allowed, and headers COOP/COEP configured for stable WebAssembly rendering.</p>  
+                    </div>  
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl transition">  
+                        Initialize & Load Game  
+                    </button>  
+                </form>  
+            </div>  
+  
+            <h2 class="text-xl font-bold mb-4 text-gray-300">Preset Library</h2>  
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">  
+                <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl flex flex-col justify-between">  
+                    <div>  
+                        <h3 class="font-bold text-white text-lg">Ren'Py Web Demo</h3>  
+                        <p class="text-sm text-gray-400 mt-1">Official template demonstration showcasing the capabilities of Ren'Py running on WebAssembly engines natively.</p>  
+                    </div>  
+                    <button onclick="launchPreset('https://www.renpy.org/demo/')" class="mt-4 bg-gray-800 hover:bg-gray-700 text-white text-sm py-2 px-4 rounded-lg transition self-start">  
+                        Play Official Demo  
+                    </button>  
+                </div>  
+            </div>  
+        </div>  
+  
+        <div id="gameView" class="absolute inset-0 hidden">  
+            <iframe id="gameContainer" class="game-frame" allow="autoplay; fullscreen; shared-array-buffer"></iframe>  
+        </div>  
+  
+    </main>  
+  
+    <script>  
+        // Global variables for handling the PWA installation prompt  
+        let deferredPrompt;  
+        const installBtn = document.getElementById('installBtn');  
+  
+        window.addEventListener('beforeinstallprompt', (e) => {  
+            e.preventDefault();  
+            deferredPrompt = e;  
+            installBtn.classList.remove('hidden');  
+        });  
+  
+        installBtn.addEventListener('click', async () => {  
+            if (!deferredPrompt) return;  
+            deferredPrompt.prompt();  
+            const { outcome } = await deferredPrompt.userChoice;  
+            if (outcome === 'accepted') {  
+                installBtn.classList.add('hidden');  
+            }  
+            deferredPrompt = null;  
+        });  
+  
+        // Register Dynamic Mock Service Worker inline via Blob url structure   
+        if ('serviceWorker' in navigator) {  
+            window.addEventListener('load', () => {  
+                const swCode = `  
+                    const CACHE_NAME = 'renpy-pwa-v1';  
+                    self.addEventListener('install', (e) => self.skipWaiting());  
+                    self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));  
+                    self.addEventListener('fetch', (e) => {  
+                        // Dynamic caching handles cross-origin WASM files and assets seamlessly  
+                        if(e.request.url.includes('.wasm') || e.request.url.includes('.js')) {  
+                            e.respondWith(  
+                                caches.open(CACHE_NAME).then((cache) => {  
+                                    return cache.match(e.request).then((response) => {  
+                                        return response || fetch(e.request).then((networkResponse) => {  
+                                            cache.put(e.request, networkResponse.clone());  
+                                            return networkResponse;  
+                                        });  
+                                    });  
+                                })  
+                            );  
+                        }  
+                    });  
+                `;  
+                const blob = new Blob([swCode], { type: 'text/javascript' });  
+                navigator.serviceWorker.register(URL.createObjectURL(blob))  
+                    .then(() => console.log("RenPy Engine Core PWA Worker initialized successfully."))  
+                    .catch(err => console.error("Worker allocation failed:", err));  
+            });  
+        }  
+  
+        // View Router Switching Engines  
+        function launchGameFromForm(event) {  
+            event.preventDefault();  
+            const url = document.getElementById('gameUrl').value;  
+            if(url) bootGameEngine(url);  
+        }  
+  
+        function launchPreset(url) {  
+            bootGameEngine(url);  
+        }  
+  
+        function bootGameEngine(targetUrl) {  
+            document.getElementById('libraryView').classList.add('hidden');  
+            document.getElementById('gameView').classList.remove('hidden');  
+            document.getElementById('backToLibrary').classList.remove('hidden');  
+              
+            // Inject the source path directly into the optimized sandbox container  
+            document.getElementById('gameContainer').src = targetUrl;  
+        }  
+  
+        function showLibrary() {  
+            document.getElementById('libraryView').classList.remove('hidden');  
+            document.getElementById('gameView').classList.add('hidden');  
+            document.getElementById('backToLibrary').classList.add('hidden');  
+              
+            // Kill engine execution state by resetting iframe contents  
+            document.getElementById('gameContainer').src = 'about:blank';  
+        }  
+    </script>  
+</body>  
+</html>  
